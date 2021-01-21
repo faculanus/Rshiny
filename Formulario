@@ -1,0 +1,205 @@
+# which fields get saved 
+fieldsAll <- c("nombre", "apellido", "terminos", "edad", "residencia")
+
+# which fields are mandatory
+fieldsMandatory <- c("nombre", "apellido","terminos")
+
+# add an asterisk to an input label
+labelMandatory <- function(label) {
+  tagList(
+    label,
+    span("*", class = "mandatory_star")
+  )
+}
+
+# get current Epoch time
+epochTime <- function() {
+  return(as.integer(Sys.time()))
+}
+
+# get a formatted string of the timestamp (exclude colons as they are invalid
+# characters in Windows filenames)
+humanTime <- function() {
+  format(Sys.time(), "%Y%m%d-%H%M%OS")
+}
+
+# save the results to a file
+saveData <- function(data) {
+  fileName <- sprintf("%s_%s.csv",
+                      humanTime(),
+                      digest::digest(data))
+  
+  write.csv(x = data, file = file.path(responsesDir, fileName),
+            row.names = FALSE, quote = TRUE)
+}
+
+# load all responses into a data.frame
+loadData <- function() {
+  files <- list.files(file.path(responsesDir), full.names = TRUE)
+  data <- lapply(files, read.csv, stringsAsFactors = FALSE)
+  #data <- dplyr::rbind_all(data)
+  data <- do.call(rbind, data)
+  data
+}
+
+# directory where responses get stored
+responsesDir <- file.path("responses")# se debe crear carpeta "responses" en el directorio seteado
+
+# CSS to use in the app
+appCSS <-
+  ".mandatory_star { color: red; }
+   .shiny-input-container { margin-top: 25px; }
+   #submit_msg { margin-left: 15px; }
+   #error { color: red; }
+   body { background: #fcfcfc; }
+   #header { background: #fff; border-bottom: 1px solid #ddd; margin: -20px -15px 0; padding: 15px 15px 10px; }
+  "
+
+# usernames that are admins
+adminUsers <- c("admin", "prof")
+
+shinyApp(
+  ui = fluidPage(
+	theme = shinytheme("flatly"),
+    shinyjs::useShinyjs(),
+    shinyjs::inlineCSS(appCSS),
+    title = "Formulario Adaptado",
+    tags$head(
+      tags$link(rel = "shortcut icon", type="image/x-icon", 
+				href="")
+		),
+    
+     
+    div(id = "header",
+      h1("Formulario Estandar"),
+      h4("Formulario hecho en base al trabajo de:",
+         a(href = "http://deanattali.com/2015/06/14/mimicking-google-form-shiny/",
+           "Dean Attali-blog post on the topic"))
+      ),
+    
+    fluidRow(
+      column(4,
+        div(
+          id = "form",
+          
+          textInput("nombre", labelMandatory("Nombre"), ""),
+          textInput("apellido", labelMandatory("Apellido")),
+          checkboxInput("terminos", "Acepto Terminos y Condiciones",FALSE),
+          selectInput("edad", "Edad", c(18:120), selected= 40),
+          selectInput("residencia","Provincia de Residencia",c("BUENOS AIRES", "CATAMARCA", "CHACO", "CHUBUT", "CIUDAD AUTONOMA DE BS AS", "CORDOBA", 
+"CORRIENTES", "EN EL EXTERIOR", "ENTRE RIOS", "FORMOSA", "JUJUY", "LA PAMPA", "LA RIOJA",
+"MENDOZA","MISIONES","NEUQUEN","RIO NEGRO","SALTA","SAN JUAN","SAN LUIS","SANTA CRUZ","SANTA FE",
+"SANTIAGO DEL ESTERO","TIERRA DEL FUEGO","TUCUMAN"),
+				selected="EN EL EXTERIOR"),#LUGAR DE RESIDENCIA
+
+actionButton("submit", "Enviar", class = "btn-primary"),
+          
+          shinyjs::hidden(
+            span(id = "submit_msg", "Submitting..."),
+            div(id = "error",
+                div(br(), tags$b("Error: "), span(id = "error_msg"))
+            )
+          )
+        ),
+
+        shinyjs::hidden(
+          div(
+            id = "thankyou_msg",
+            h3("¡Gracias, tu respuesta fue enviada exitosamente!"),
+            actionLink("submit_another", "Enviar otra respuesta")
+          )
+        )
+      ),
+      column(8,
+        uiOutput("adminPanelContainer")
+      )
+    )
+  ),
+server = function(input, output, session) {
+    
+    # Enable the Submit button when all mandatory fields are filled out
+    observe({
+      mandatoryFilled <-
+        vapply(fieldsMandatory,
+               function(x) {
+                 !is.null(input[[x]]) && input[[x]] != "" && input[[x]] != FALSE
+               },
+               logical(1))
+      mandatoryFilled <- all(mandatoryFilled)
+      
+      shinyjs::toggleState(id = "submit", condition = mandatoryFilled)
+    })
+    
+    # Gather all the form inputs (and add timestamp)
+    formData <- reactive({
+      data <- sapply(fieldsAll, function(x) input[[x]])
+      data <- c(data, fecha_hora_de_carga = humanTime())
+      data <- t(data)
+      data
+    })    
+    
+    # When the Submit button is clicked, submit the response
+    observeEvent(input$submit, {
+      
+      # User-experience stuff
+      shinyjs::disable("submit")
+      shinyjs::show("submit_msg")
+      shinyjs::hide("error")
+      
+      # Save the data (show an error message in case of error)
+      tryCatch({
+        saveData(formData())
+        shinyjs::reset("form")
+        shinyjs::hide("form")
+        shinyjs::show("thankyou_msg")
+      },
+      error = function(err) {
+        shinyjs::html("error_msg", err$message)
+        shinyjs::show(id = "error", anim = TRUE, animType = "fade")
+      },
+      finally = {
+        shinyjs::enable("submit")
+        shinyjs::hide("submit_msg")
+      })
+    })
+    
+    # submit another response
+    observeEvent(input$submit_another, {
+      shinyjs::show("form")
+      shinyjs::hide("thankyou_msg")
+    })
+    
+    # render the admin panel
+    output$adminPanelContainer <- renderUI({
+      if (!isAdmin()) return()
+      
+      div(
+        id = "adminPanel",
+        h2("Respuestas (Posible para solo admin)"),
+        downloadButton("downloadBtn", "Descargar Respuestas"), br(), br(),
+        DT::dataTableOutput("responsesTable"), br(),
+        "* Respuestas grabadas"
+      )
+    })
+    
+    # determine if current user is admin
+    isAdmin <- reactive({
+      is.null(session$user) || session$user %in% adminUsers
+    })    
+    
+    # Show the responses in the admin table
+    output$responsesTable <- DT::renderDataTable({
+      data <- loadData()
+          })
+    
+    # Allow user to download responses
+    output$downloadBtn <- downloadHandler(
+      filename = function() { 
+        sprintf("Respuestas_%s.csv", humanTime())
+      },
+      content = function(file) {
+        write.csv(loadData(), file, row.names = FALSE)
+      }
+    )    
+  }
+)
