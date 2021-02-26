@@ -1,0 +1,91 @@
+CCTIE<-read.csv("Tabla1.csv")
+Tabla2 <- read.csv("tabla2.csv") # filtro de Tabla 1
+library(shinythemes)
+library(shiny)
+
+ui <- fluidPage(
+		theme = shinytheme("superhero"),
+
+  # App title ----
+  titlePanel("¿Quienes son los Beneficiarios de Tarifa Social Electrica?"),
+
+  # Sidebar layout with a input and output definitions ----
+  sidebarLayout(
+
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+
+      # Input: Selector for choosing dataset ----
+      selectInput(inputId = "dataset",
+                  label = "Elegir:",
+                  choices = c("Beneficiarios Total",
+					                    "Opcion 2"
+					)),
+		br(),
+		br(),
+		br(),
+		plotOutput('sexo')
+			),
+
+
+      mainPanel(
+			h1(textOutput('cantidad')),
+			h2("Porcentaje sobre el total:", textOutput('porcentaje')),
+
+      # Output: Verbatim text for data summary ----
+     		splitLayout(
+			plotOutput('monto'),
+			plotOutput('edad')
+			)
+	
+   		 )
+  )
+)
+
+server <- function(input, output,session) {
+  # Return the requested dataset ----
+
+datasetInput <- reactive({
+    switch(input$dataset,
+				"Beneficiarios Total"=CCTIE,
+	      "Opcion 2"= Tabla2
+				)
+   })
+
+	
+output$cantidad <- renderText({
+		h<-datasetInput()
+		as.character(count(h))
+		})
+
+output$porcentaje <- renderText({
+		h<-datasetInput()
+		round(as.numeric(count(h)/count(CCTIE)*100),2)
+		})
+
+output$monto <- renderPlot({
+		m<-datasetInput()
+		m<-filter(m,m[24]<90000)
+		par(bg="steelblue4")
+		hist(m$TOTAL,main="Ingresos",xlab="Pesos",ylab="Cantidad de Personas")
+		abline(v=37800,col="red")
+		legend("topright", legend = c("2 SMVM"),col="red",bty = "n", pch=20)
+		})
+output$edad <- renderPlot({
+		e<-datasetInput()
+		e<-e[25]
+		par(bg="steelblue4")
+		hist(e$EDAD,main="Edad",xlab="Años",ylab="Cantidad de Personas")
+		abline(v=60,col="red")
+		legend("topright", legend = c("60 años"),col="red",bty = "n", pch=20)
+		})
+
+output$sexo <- renderPlot({
+		s<-datasetInput()
+		par(bg="steelblue4")
+		pie(count(s,SEXO)$n,label=unique(s$SEXO),
+		main= "Proporción de Usuarios por Género",col=4:6)
+		})
+
+  }
+shinyApp(ui = ui, server = server)
