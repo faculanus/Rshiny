@@ -1,0 +1,283 @@
+#======CARGA DE ARCHIVOS
+CCEEE<-read_tsv("C:/Users/flanus/Downloads/CRUCE_69874_CON_CRITERIOS.TXT")#leer ruta para importar archivo.
+
+T<-read.csv2("C:/Users/flanus/Downloads/69874_20210318154211.csv",sep=";",dec=".",skip=8)#leer excel con filas 8 vacias antes del header
+
+EMPLEO<-read.csv2("C:/Users/flanus/Downloads/69874_20210318134828.csv",sep=";",dec=".",skip=8)#leer excel con filas 8 vacias antes del header
+JUBILACION<-read.csv2("C:/Users/flanus/Downloads/69874_20210318160001.csv",sep=";",dec=".",skip=8)#leer excel con filas 8 vacias antes del header
+PNC<-read.csv2("C:/Users/flanus/Downloads/69874_20210318160525.csv",sep=";",dec=".",skip=8)#leer excel con filas 8 vacias antes del header
+RUBPS<-read.csv2("C:/Users/flanus/Downloads/69874_20210318160301.csv",sep=";",dec=".",skip=8)#leer excel con filas 8 vacias antes del header
+
+#=====SELECCION DE CAMPOS A AGRUPAR
+E<-cbind(EMPLEO[1],EMPLEO[13])
+J<-cbind(JUBILACION[1],JUBILACION[12])
+PNC<-cbind(PNC[1],PNC[12])
+PS<-cbind(RUBPS[1],RUBPS[11])
+INGRESO<-full_join(CCEEE,E,by="ID_PERSONA")
+INGRESO<-full_join(E,J,by="ID_PERSONA")
+INGRESO<-full_join(INGRESO,PNC,by="ID_PERSONA")
+INGRESO<-full_join(INGRESO,PS,by="ID_PERSONA")
+x<-ncol(INGRESO)
+for (i in 2:x) {INGRESO[,i][is.na(INGRESO[,i])]<-0}#pasar nulos a ceros
+TOTAL<-INGRESO$MONTO.x+INGRESO$MONTO.y+INGRESO$MONTO.x.x+INGRESO$MONTO.y.y #suma de montos
+INGRESO<-cbind(INGRESO,TOTAL)
+INGRESO<-aggregate(TOTAL ~ ID_PERSONA , data = INGRESO, FUN = sum)
+INGRESOB<-semi_join(INGRESO,CCEEE,by="ID_PERSONA")
+#====agregar TEMATICA A LOS ID_PERSONA
+
+CCT<-semi_join(T,CCEEE,by="ID_PERSONA")# Cruce archivo T vs CCEEE según ID_PERSONA Distintos
+
+#====AGREGAR LOS INGRESOS A LOS ID_PERSONAS
+
+CCTI<-full_join(CCT,INGRESOB,by="ID_PERSONA")#agrega Ingresos
+CCTI<-filter(CCTI,NDOC>1)
+x<-ncol(CCTI)#setear valor x
+
+for (i in 9:x) {CCTI[,i][is.na(CCTI[,i])]<-0} #pasar NA a ceros.
+
+CCTI<-separate(CCTI,FNAC, c("DIA","MES","ANIO"), "/")#separar ANIO para calcular la dedad.
+
+CCTI$ANIO<-as.numeric(CCTI$ANIO)#pasar ANIO a numeric
+
+EDAD<-2021 - CCTI$ANIO# calculo de edad aproximada.
+
+CCTIE<-cbind(CCTI,EDAD)#agrega edad a CCT
+
+x<-ncol(CCTIE)#setear valor x
+
+for (i in 9:x) {CCTIE[,i][is.na(CCTIE[,i])]<-0} #pasar NA a ceros.
+
+#============TEMATICAS=====
+AERONAVES<-filter(CCTIE,AERONAVES>0)
+AUTOMOTORES<-filter(CCTIE,AUTOMOTORES>0)
+CUD<-filter(CCTIE,CERTIFICADO_UNICO_DE_DISCAPACI>0)
+EMBARCACIONES<-filter(CCTIE,EMBARCACIONES>0)
+EMPLEO_DEPENDIENTE<-filter(CCTIE,EMPLEO_DEPENDIENTE>0)
+INMUEBLES<-filter(CCTIE,INMUEBLES>0)
+JUBILACIONES_Y_PENSIONES<-filter(CCTIE,JUBILACIONES_Y_PENSIONES>0)
+PENSIONES_NO_CONTRIBUTIVAS<-filter(CCTIE,PENSIONES_NO_CONTRIBUTIVAS>0)
+PROGRAMAS_SOCIALES<-filter(CCTIE,PROGRAMAS_SOCIALES>0)
+SEGURO_DE_DESEMPLEO<-filter(CCTIE,SEGURO_DE_DESEMPLEO>0)
+CEROTEMATICA<-filter(T,is.na(CANT_TEMATICAS))
+CEROTEMATICA<-separate(CEROTEMATICA,FNAC, c("DIA","MES","ANIO"), "/")#separar ANIO para calcular la dedad.
+CEROTEMATICA$ANIO<-as.numeric(CEROTEMATICA$ANIO)#pasar ANIO a numeric
+EDAD<-2021 - CEROTEMATICA$ANIO# calculo de edad aproximada.
+CEROTEMATICA<-cbind(CEROTEMATICA,EDAD)#agrega edad a CCT
+for (i in 9:x) {CEROTEMATICA[,i][is.na(CEROTEMATICA[,i])]<-0} #pasar NA a ceros.
+
+UNATEMATICA<-filter(CCTIE,CANT_TEMATICAS==1)
+DOSTEMATICA<-filter(CCTIE,CANT_TEMATICAS==2)
+TRESTEMATICA<-filter(CCTIE,CANT_TEMATICAS==3)
+MASDE3TEMATICAS<-filter(CCTIE,CANT_TEMATICAS>3)
+#============ NO USAR =====================================
+
+for (i in 11:x) suma[i]<-sum(CCT[i])#Calcular cantidad de registros por Tematica
+ 
+SUMAT<-cbind(colnames(CCT[11:x]),suma[11:x])# Cantidad de resutlados por tematica (REPITE REGISTROS)
+
+SUMAT<-as.data.frame(SUMAT)#pasar a formato data frame
+
+names(SUMAT)[1]<-"TEMATICA"#nombre emcabezdo columna 1
+
+names(SUMAT)[2]<-"CANTIDAD"#nombre emcabezdo columna 2
+
+for (i in 11:x) {sume[i]<-sum(count(filter(CCT[i],CCT[i]>0)))}#Calcular únicos por Tematica (SIN REPETIR)
+
+SUMET<-cbind(colnames(CCT[11:x]),sume[11:x])# Agregar nombres de columnas sumadas
+
+SUMET<-as.data.frame(SUMET)#pasar a formato data frame
+
+names(SUMET)[1]<-"TEMATICA"#nombre emcabezdo columna 1
+
+names(SUMET)[2]<-"CANTIDAD"#nombre emcabezdo columna 2
+
+#==============================    APP      ================
+library(shinythemes)
+library(shiny)
+
+ui <- fluidPage(
+		theme = shinytheme("superhero"),
+
+  # App title ----
+  titlePanel("¿Quienes son?"),
+
+  # Sidebar layout with a input and output definitions ----
+  sidebarLayout(
+
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+
+      # Input: Selector for choosing dataset ----
+      selectInput(inputId = "dataset",
+                  label = "Elegir:",
+                  choices = c("Beneficiarios Total",
+					"Discapacidad",
+					"Aeronaves",
+					"Automotores",
+					"EMBARCACIONES",
+					"EMPLEO_DEPENDIENTE",
+					"INMUEBLES",
+					"JUBILACIONES_Y_PENSIONES",
+					"PENSIONES_NO_CONTRIBUTIVAS",
+					"PROGRAMAS_SOCIALES",
+					"SEGURO_DE_DESEMPLEO",
+					"Con 0 Tematica",
+					"Con 1 Tematica",
+					"Con 2 Tematicas",
+					"Con 3 Tematicas",
+					"Con Mas de 3 Tematicas"
+					)),
+		br(),
+		br(),
+		br(),
+		plotOutput('sexo'),
+downloadButton("downloadsexo", "Descargar Género"),
+			),
+
+
+      mainPanel(
+			h1(textOutput('cantidad')),
+			h2("Porcentaje sobre el total:", textOutput('porcentaje')),
+
+      # Output: Verbatim text for data summary ----
+     		splitLayout(
+			plotOutput('monto'),
+			plotOutput('edad')
+			),
+		splitLayout(
+downloadButton("downloadmonto", "Descargar Ingreso"),
+downloadButton("downloadedad", "Descargar Edad")
+		),
+   		 )
+  )
+)
+
+server <- function(input, output,session) {
+  # Return the requested dataset ----
+
+datasetInput <- reactive({
+    switch(input$dataset,
+				"Beneficiarios Total"=CCTIE,
+					"Discapacidad"=CUD,
+					"Aeronaves"=AERONAVES,
+					"Automotores"=AUTOMOTORES,
+					"EMBARCACIONES"=EMBARCACIONES,
+					"EMPLEO_DEPENDIENTE"=EMPLEO_DEPENDIENTE,
+					"INMUEBLES"=INMUEBLES,
+					"JUBILACIONES_Y_PENSIONES"=JUBILACIONES_Y_PENSIONES,
+					"PENSIONES_NO_CONTRIBUTIVAS"=PENSIONES_NO_CONTRIBUTIVAS,
+					"PROGRAMAS_SOCIALES"=PROGRAMAS_SOCIALES,
+					"SEGURO_DE_DESEMPLEO"=SEGURO_DE_DESEMPLEO,
+					"Con 0 Tematica"=CEROTEMATICA,
+					"Con 1 Tematica"=UNATEMATICA,
+					"Con 2 Tematicas"=DOSTEMATICA,
+					"Con 3 Tematicas"=TRESTEMATICA,
+					"Con Mas de 3 Tematicas"=MASDE3TEMATICAS
+
+				)
+   })
+
+	
+output$cantidad <- renderText({
+		h<-datasetInput()
+		as.character(count(h))
+		})
+
+output$porcentaje <- renderText({
+		h<-datasetInput()
+		round(as.numeric(count(h)/count(CCTIE)*100),2)
+		})
+
+output$monto <- renderPlot({
+		m<-datasetInput()
+		Max<-as.integer(summary(m$TOTAL)[6])
+		Prom<-as.integer(summary(m$TOTAL)[4])
+		Min<-as.integer(summary(m$TOTAL)[1])
+		PQ<-as.integer(summary(m$TOTAL)[2])
+		TQ<-as.integer(summary(m$TOTAL)[5])
+		m<-filter(m,m[24]<90000)
+		par(bg="steelblue4")
+		hist(m$TOTAL,main="Ingresos",xlab="Pesos",ylab="Cantidad de Personas")
+		abline(v=37800,col="red")
+		text(37800,0, "2 Salarios Mínimos",col="white")
+		legend("topright", legend = c("Min",Min,"25%",PQ,"Medio",Prom,"75%",TQ,"Max",Max))
+		
+})
+output$edad <- renderPlot({
+		e<-datasetInput()
+		x<-ncol(e)
+		e<-e[x]
+		par(bg="steelblue4")
+		hist(e$EDAD,main="Edad",xlab="Años",ylab="Cantidad de Personas")
+		abline(v=60,col="red")
+		legend("topright", legend = c("60 años"),col="red",bty = "n", pch=20)
+		})
+
+output$sexo <- renderPlot({
+		s<-datasetInput()
+		par(bg="steelblue4")
+		
+		pie(count(s,SEXO)$n,c(levels(s$SEXO)),
+		main= "Proporción de Usuarios por Género",col=4:6)
+		legend("topright", legend = c(count(s,SEXO)$n),
+							col=4:6,
+							bty = "n", pch=16)
+		})
+
+output$downloadsexo <- downloadHandler(
+filename = function() {
+paste("sexo", "pdf", sep = ".")
+},
+content = function(file) {
+pdf(file)
+	s<-datasetInput()
+		par(bg="steelblue4")
+		pie(count(s,SEXO)$n,label=c(levels(s$SEXO)),
+		main= "Proporción de Usuarios por Género",col=4:6)
+
+dev.off()
+
+		})
+
+output$downloadedad <- downloadHandler(
+filename = function() {
+paste("edad", "pdf", sep = ".")
+},
+content = function(file) {
+pdf(file)
+
+	e<-datasetInput()
+		x<-ncol(e)
+		e<-e[x]
+		par(bg="steelblue4")
+		hist(e$EDAD,main="Edad",xlab="Años",ylab="Cantidad de Personas")
+		abline(v=60,col="red")
+		legend("topright", legend = c("60 años"),col="red",bty = "n", pch=20)
+dev.off()
+
+		})
+
+output$downloadmonto <- downloadHandler(
+filename = function() {
+paste("monto", "pdf", sep = ".")
+},
+content = function(file) {
+pdf(file)
+
+m<-datasetInput()
+		Max<-as.integer(summary(m$TOTAL)[6])
+		Prom<-as.integer(summary(m$TOTAL)[4])
+		Min<-as.integer(summary(m$TOTAL)[1])
+		PQ<-as.integer(summary(m$TOTAL)[2])
+		TQ<-as.integer(summary(m$TOTAL)[5])
+		m<-filter(m,m[24]<90000)
+		par(bg="steelblue4")
+		hist(m$TOTAL,main="Ingresos",xlab="Pesos",ylab="Cantidad de Personas")
+		abline(v=37800,col="red")
+		text(37800,0, "2 Salarios Mínimos",col="red")
+		legend("topright", legend = c("Min",Min,"25%",PQ,"Medio",Prom,"75%",TQ,"Max",Max),col="white")		
+dev.off()
+
+		})
+  }
+shinyApp(ui = ui, server = server)
